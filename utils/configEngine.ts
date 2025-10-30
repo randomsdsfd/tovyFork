@@ -1,66 +1,71 @@
 import prisma from './database';
 
-const configCahce = new Map<string, any>();
+// 🧠 Persistent in-memory cache
+const configCache = new Map<string, unknown>();
 
-/** @returns {Promise<object>} */
-
-export async function getConfig(key: string, groupid: number) {
-	if (configCahce.has(`${groupid}_${key}`)) {
-		return configCahce.get(`${groupid}_${key}`);
-	} else {
-		const config = await prisma.config.findFirst({
-			where: {
-				workspaceGroupId: groupid,
-				key: key,
-			},
-		});
-		if (config) {
-			configCahce.set(`${groupid}_${key}`, config.value);
-			return config.value;
-		} else {
-			return null;
-		}
+/**
+ * Get a config value for a given workspace and key.
+ * Uses cache first, falls back to Prisma.
+ */
+export async function getConfig<T = unknown>(
+	key: string,
+	groupId: number
+): Promise<T | null> {
+	const cacheKey = `${groupId}_${key}`;
+	if (configCache.has(cacheKey)) {
+		return configCache.get(cacheKey) as T;
 	}
-}
 
-export async function fetchworkspace(groupid: number) {
-	const workspace = await prisma.workspace.findFirst({
-		where: {
-			groupId: groupid,
-		},
-	});
-	return workspace;
-}
-
-export async function setConfig(key: string, value: any, groupid: number) {
 	const config = await prisma.config.findFirst({
-		where: {
-			workspaceGroupId: groupid,
-			key: key,
-		},
+		where: { workspaceGroupId: groupId, key },
 	});
-	if (config) {
+
+	if (!config) return null;
+
+	configCache.set(cacheKey, config.value);
+	return config.value as T;
+}
+
+/**
+ * Fetch workspace data by Roblox group ID.
+ */
+export async function fetchWorkspace(groupId: number) {
+	return prisma.workspace.findFirst({
+		where: { groupId },
+	});
+}
+
+/**
+ * Create or update a config value.
+ * Automatically updates cache.
+ */
+export async function setConfig(
+	key: string,
+	value: unknown,
+	groupId: number
+): Promise<void> {
+	const existing = await prisma.config.findFirst({
+		where: { workspaceGroupId: groupId, key },
+		select: { id: true },
+	});
+
+	if (existing) {
 		await prisma.config.update({
-			where: {
-				id: config.id,
-			},
-			data: {
-				value: value,
-			},
+			where: { id: existing.id },
+			data: { value },
 		});
 	} else {
 		await prisma.config.create({
-			data: {
-				key: key,
-				value: value,
-				workspaceGroupId: groupid,
-			},
+			data: { key, value, workspaceGroupId: groupId },
 		});
 	}
-	configCahce.set(`${groupid}_${key}`, value);
+
+	configCache.set(`${groupId}_${key}`, value);
 }
 
-export async function refresh(key: string, groupid: number) {
-	configCahce.delete(`${groupid}_${key}`);
+/**
+ * Remove a specific key from cache so next getConfig() reloads it.
+ */
+export function refreshConfig(key: string, groupId: number): void {
+	configCache.delete(`${groupId}_${key}`);
 }
-
