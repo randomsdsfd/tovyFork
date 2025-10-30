@@ -1,101 +1,80 @@
-import { WebhookClient, EmbedBuilder, ActionRowBuilder, ButtonBuilder } from 'discord.js';
+import { WebhookClient, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import prisma, { Session, SessionType } from '@/utils/database';
 import { getThumbnail, getUsername } from './userinfoEngine';
-export const sendWebhook = async (session: (Session & {
-	sessionType: SessionType
-})) => {
-	if (!session.sessionType.webhookEnabled) return;
-	const webhook = new WebhookClient({ url: session.sessionType.webhookUrl! });
 
-	const messageEmbed = new EmbedBuilder()
-		.setTitle(await gmsg(session.sessionType.webhookTitle || 'New %TYPE% Session'))
-		.setColor("Green")
-		.setTimestamp()
-		.setAuthor({
-			name: await getUsername(session.ownerId!),
-			iconURL: await getThumbnail(session.ownerId!),
-			url: `https://www.roblox.com/users/${session.ownerId}/profile`
-		})
-		.setDescription(
-			await gmsg(
-				session.sessionType.webhookBody ||
-				`A %TYPE% is now being hosted by %HOST%! Join the game below to attend this session.`
-			)
-		)
-		.setFooter({ text: `Tovy Sessions` });
-
-	const actionRow = new ActionRowBuilder<ButtonBuilder>()
-
-	if (session.sessionType.gameId) {
-		messageEmbed.addFields([{
-			name: "Gamelink",
-			value: `https://www.roblox.com/games/${session.sessionType.gameId}/-`,
-			inline: true
-		}])
-		actionRow.addComponents(new ButtonBuilder().setURL(`https://www.roblox.com/games/${session.sessionType.gameId}/-`).setLabel("Join Game").setStyle(("Link" as any)))
-	}
-
-	const message = await webhook.send({ embeds: [messageEmbed], components: actionRow.components.length ? [actionRow] : undefined, content: session.sessionType.webhookPing || "" })
-	await prisma.session.update({
-		where: {
-			id: session.id
-		},
-		data: {
-			messageId: message.id
-		}
-	})
-
-	async function gmsg(text: string) {
-		let replacements: {
-			[key: string]: string;
-		} = {};
-		replacements[`%TYPE%`] = session.sessionType.name;
-		replacements[`%HOST%`] = await getUsername(session.ownerId!);
-
-		return text.replace(/%\w+%/g, (all) => {
-			return typeof replacements[all] !== "undefined"
-				? replacements[all]
-				: all;
-		});
-	}
+async function formatMessage(session: Session & { sessionType: SessionType }, text: string) {
+  const replacements = {
+    "%TYPE%": session.sessionType.name,
+    "%HOST%": await getUsername(session.ownerId!)
+  };
+  return text.replace(/%\w+%/g, (m) => replacements[m] ?? m);
 }
 
-export const deleteWebhook = async (session: (Session & {
-	sessionType: SessionType
-})) => {
-	if (!session.sessionType.webhookEnabled) return;
-	if (!session.messageId) return;
-	const webhook = new WebhookClient({ url: session.sessionType.webhookUrl! });
-	const messageEmbed = new EmbedBuilder()
-		.setTitle(await gmsg('%TYPE% Session Ended'))
-		.setColor("Red")
-		.setTimestamp()
-		.setAuthor({
-			name: await getUsername(session.ownerId!),
-			iconURL: await getThumbnail(session.ownerId!),
-			url: `https://www.roblox.com/users/${session.ownerId}/profile`
-		})
-		.setDescription(
-			await gmsg(
-				`The %TYPE% session hosted by %HOST% has ended.`
-			)
-		)
-		.setFooter({ text: `Tovy Sessions` });
-	
-	await webhook.editMessage(session.messageId, { embeds: [messageEmbed], components: [], content: "" })
-	
+function buildEmbed(session: Session & { sessionType: SessionType }, opts: { ended?: boolean; hostName: string; hostThumb: string; }) {
+  const embed = new EmbedBuilder()
+    .setTitle(opts.ended
+      ? `${session.sessionType.name} Session Ended`
+      : `New ${session.sessionType.name} Session`)
+    .setColor(opts.ended ? "Red" : "Green")
+    .setTimestamp()
+    .setAuthor({ name: opts.hostName, iconURL: opts.hostThumb, url: `https://www.roblox.com/users/${session.ownerId}/profile` })
+    .setFooter({ text: "Tovy Sessions" });
 
-	async function gmsg(text: string) {
-		let replacements: {
-			[key: string]: string;
-		} = {};
-		replacements[`%TYPE%`] = session.sessionType.name;
-		replacements[`%HOST%`] = await getUsername(session.ownerId!);
+  return embed;
+}
 
-		return text.replace(/%\w+%/g, (all) => {
-			return typeof replacements[all] !== "undefined"
-				? replacements[all]
-				: all;
-		});
-	}
+export async function sendWebhook(session: Session & { sessionType: SessionType }) {
+  if (!session.sessionType.webhookEnabled || !session.sessionType.webhookUrl) return;
+
+  const webhook = new WebhookClient({ url: session.sessionType.webhookUrl });
+  const hostName = await getUsername(session.ownerId!);
+  const hostThumb = await getThumbnail(session.ownerId!);
+
+  const embed = buildEmbed(session, { hostName, hostThumb })
+    .setDescription(await formatMessage(session,
+      session.sessionType.webhookBody ||
+      `A %TYPE% is now being hosted by %HOST%! Join below to attend.`));
+
+  const row = new ActionRowBuilder<ButtonBuilder>();
+  if (session.sessionType.gameId) {
+    const url = `https://www.roblox.com/games/${session.sessionType.gameId}/-`;
+    embed.addFields({ name: "Game Link", value: url, inline: true });
+    row.addComponents(new ButtonBuilder().setURL(url).setLabel("Join Game").setStyle(ButtonStyle.Link));
+  }
+
+  try {
+    const msg = await webhook.send({
+      embeds: [embed],
+      components: row.components.length ? [row] : undefined,
+      content: session.sessionType.webhookPing ?? null
+    });
+
+    await prisma.session.update({
+      where: { id: session.id },
+      data: { messageId: msg.id }
+    });
+  } catch (err) {
+    console.error("Failed to send session webhook:", err);
+  }
+}
+
+export async function deleteWebhook(session: Session & { sessionType: SessionType }) {
+  if (!session.sessionType.webhookEnabled || !session.sessionType.webhookUrl || !session.messageId) return;
+
+  const webhook = new WebhookClient({ url: session.sessionType.webhookUrl });
+  const hostName = await getUsername(session.ownerId!);
+  const hostThumb = await getThumbnail(session.ownerId!);
+
+  const embed = buildEmbed(session, { ended: true, hostName, hostThumb })
+    .setDescription(await formatMessage(session, `The %TYPE% session hosted by %HOST% has ended.`));
+
+  try {
+    await webhook.editMessage(session.messageId, {
+      embeds: [embed],
+      components: [],
+      content: null
+    });
+  } catch (err) {
+    console.error("Failed to delete session webhook:", err);
+  }
 }

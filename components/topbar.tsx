@@ -1,96 +1,120 @@
-import type { NextPage } from "next";
-import { loginState } from "../state";
+import { FC, useState } from "react";
 import { useRecoilState } from "recoil";
 import { Menu } from "@headlessui/react";
 import { useRouter } from "next/router";
-import { IconLogout, IconSettings } from "@tabler/icons";
+import { IconLogout, IconSettings } from "@tabler/icons-react";
 import axios from "axios";
+import { loginState } from "@/state";
 
-const Topbar: NextPage = () => {
+const Topbar: FC = () => {
 	const [login, setLogin] = useRecoilState(loginState);
+	const [isLoggingOut, setIsLoggingOut] = useState(false);
 	const router = useRouter();
-	async function logout() {
-		await axios.post("/api/auth/logout");
-		setLogin({
-			userId: 1,
-			username: '',
-			displayname: '',
-			canMakeWorkspace: false,
-			thumbnail: '',
-			workspaces: [],
-		});
-		router.push('/login');
-	}
-	return (
-		<div className="z-10 h-12 rounded-b-xl w-screen bg-white drop-shadow flex-row flex lg:px-48 md:px-32 sm:px-20 xs:px-9 px-8 dark:bg-gray-900 ">
-			<div className="h-full flex flex-row w-full">
 
-				<div className="flex flex-row my-auto w-full">
-					<button className="h-auto flex flex-row mr-auto rounded-xl py-1 hover:bg-gray-200 dark:hover:bg-gray-800 px-2 transition cursor-pointer">
-						<img
-							src='./Icon_Transparent.svg'
-							className="rounded-full h-8 w-8 my-auto"
-							alt="Tovy logo"
-						/>
-						<p className="my-auto text-md font-medium pl-2 pr-2">
-							Tovy
-						</p>
-					</button>
-					<Menu as="div" className="relative inline-block text-left">
-						<div className="">
-							<Menu.Button className="h-auto flex flex-row ml-auto rounded-xl py-1 hover:bg-gray-200 dark:hover:bg-gray-800 px-2 transition cursor-pointer">
+	async function logout() {
+		try {
+			setIsLoggingOut(true);
+			await axios.post("/api/auth/logout");
+
+			setLogin({
+				userId: 0,
+				username: "",
+				displayname: "",
+				canMakeWorkspace: false,
+				thumbnail: "",
+				workspaces: [],
+			});
+
+			router.push("/login");
+		} catch (err) {
+			console.error("Logout failed:", err);
+		} finally {
+			setIsLoggingOut(false);
+		}
+	}
+
+	return (
+		<div className="z-10 h-12 fixed top-0 left-0 w-full rounded-b-xl bg-white dark:bg-gray-900 drop-shadow flex items-center justify-between px-8 sm:px-16 md:px-32 lg:px-48">
+			{/* Left - Logo */}
+			<a
+				onClick={() => router.push("/")}
+				className="flex flex-row items-center rounded-xl px-2 py-1 hover:bg-gray-200 dark:hover:bg-gray-800 transition cursor-pointer select-none"
+			>
+				<img
+					src="/Icon_Transparent.svg"
+					alt="Tovy logo"
+					className="h-8 w-8 rounded-full"
+					draggable="false"
+				/>
+				<p className="ml-2 text-md font-medium">Tovy</p>
+			</a>
+
+			{/* Right - User Menu */}
+			<Menu as="div" className="relative inline-block text-left">
+				<Menu.Button className="flex flex-row items-center rounded-xl px-2 py-1 hover:bg-gray-200 dark:hover:bg-gray-800 transition cursor-pointer select-none">
+					<img
+						src={login?.thumbnail || "/placeholder-avatar.png"}
+						alt="User avatar"
+						className="h-8 w-8 rounded-full bg-gray-400"
+					/>
+					<p className="ml-2 text-md font-medium">{login?.displayname || "User"}</p>
+				</Menu.Button>
+
+				<Menu.Items className="absolute right-0 z-20 mt-2 w-56 origin-top-right rounded-xl bg-white dark:bg-gray-800 shadow-lg ring-1 ring-black ring-opacity-5 focus-visible:outline-none">
+					<div className="py-1">
+						{/* Signed-in info */}
+						<Menu.Item>
+							<a className="flex flex-row px-4 py-2 text-sm cursor-default select-none">
 								<img
-									src={login?.thumbnail}
-									className="rounded-full bg-gray-400 h-8 w-8 my-auto"
+									src={login?.thumbnail || "/placeholder-avatar.png"}
+									className="h-8 w-8 rounded-full bg-gray-400 my-auto"
 									alt="User avatar"
 								/>
-								<p className="my-auto text-md font-medium pl-2">
-									{login?.displayname}
-								</p>
-							</Menu.Button>
-						</div>
-						<Menu.Items className="absolute right-0 z-20 mt-2 w-56 origin-top-right rounded-xl bg-white dark:bg-gray-800 shadow-lg ring-1 ring-black ring-opacity-5 focus-visible:outline-none">
-							<div className="py-1">
-								<Menu.Item>
-									<a className="flex flex-row px-4 py-2 text-sm">
-										<img
-											src={login?.thumbnail}
-											className="rounded-full bg-gray-400 h-8 w-8 my-auto"
-											alt="User avatar"
-										/>
-										<div className="ml-2"> Signed in as <br />
-											<span className="font-medium"> {login.username} </span> </div>
-									</a>
-								</Menu.Item>
-								<div className="w-full h-px bg-gray-200 dark:bg-gray-600"></div>
-								<Menu.Item>
-									{({ active }) => (
-										<a
-											className={`${active ? "bg-tovybg text-white" : "text-gray-700 dark:text-white"
-												}  px-3 py-2 text-sm rounded-xl m-1 mb-0 font-medium flex flex-row cursor-pointer`}
-										>
-											<IconSettings size={22} className="inline-block" />
-											<p className="ml-2"> Account settings </p>
-										</a>
-									)}
-								</Menu.Item>
-								<Menu.Item>
-									{({ active }) => (
-										<a
-											className={`${active ? "bg-tovybg text-white" : "text-gray-700 dark:text-white"
-												}  px-3 py-2 text-sm rounded-xl m-1 mb-0 font-medium flex flex-row cursor-pointer`}
-											onClick={logout}
-										>
-											<IconLogout size={22} className="inline-block" />
-											<p className="ml-2"> Logout </p>
-										</a>
-									)}
-								</Menu.Item>
-							</div>
-						</Menu.Items>
-					</Menu>
-				</div>
-			</div>
+								<div className="ml-2">
+									<p className="text-xs text-gray-400">Signed in as</p>
+									<span className="font-medium text-gray-700 dark:text-gray-200">
+										{login.username || "Unknown"}
+									</span>
+								</div>
+							</a>
+						</Menu.Item>
+
+						<div className="h-px bg-gray-200 dark:bg-gray-700 my-1" />
+
+						{/* Account settings */}
+						<Menu.Item>
+							{({ active }) => (
+								<a
+									onClick={() => router.push("/settings")}
+									className={`${active
+										? "bg-tovybg text-white"
+										: "text-gray-700 dark:text-white"
+										} px-3 py-2 text-sm rounded-xl m-1 font-medium flex flex-row cursor-pointer transition-colors`}
+								>
+									<IconSettings size={20} className="inline-block" />
+									<p className="ml-2">Account settings</p>
+								</a>
+							)}
+						</Menu.Item>
+
+						{/* Logout */}
+						<Menu.Item>
+							{({ active }) => (
+								<a
+									onClick={logout}
+									className={`${active
+										? "bg-tovybg text-white"
+										: "text-gray-700 dark:text-white"
+										} px-3 py-2 text-sm rounded-xl m-1 font-medium flex flex-row cursor-pointer transition-colors ${isLoggingOut ? "opacity-60 cursor-not-allowed" : ""}`}
+								>
+									<IconLogout size={20} className="inline-block" />
+									<p className="ml-2">{isLoggingOut ? "Logging out..." : "Logout"}</p>
+								</a>
+							)}
+						</Menu.Item>
+					</div>
+				</Menu.Items>
+			</Menu>
 		</div>
 	);
 };
