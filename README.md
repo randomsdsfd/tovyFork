@@ -36,11 +36,8 @@
         <li>
           Warn, promote, demote, and way more to your members
         </li>
-        <li>
-          Communicate with your members directly in Tovy
-        </li>
 		<li>
-          Host your docs with Tovy
+          Host your docs with Bloxion
         </li>
 		<li>
           Assign your staff activity requirements (soon)
@@ -61,5 +58,5 @@
     </li>
   </ul>
   <h2>License</h2>
-  Tovy is licensed under the <a href="./LICENSE">GNU General Public License v3.0.</a>
+  Bloxion is licensed under the <a href="./LICENSE">GNU General Public License v3.0.</a>
 </div>
